@@ -6,7 +6,11 @@ Offline-first personal finance tracker with Telegram command ingest, MAUI Hybrid
 
 - v1 boundaries and architecture are documented and locked.
 - Solution and project skeleton is scaffolded.
-- Implementation is not started yet.
+- Domain entities are implemented with core invariants and audit behavior.
+- Infrastructure EF Core persistence is implemented (DbContext + entity configurations).
+- Initial EF Core migration is generated in `src/PersonalFinanceOfflineTracker.Infrastructure/Persistence/Migrations`.
+- API is wired to SQLite and applies migrations at startup (`FinanceDbContext.Database.Migrate()`).
+- API, Domain, Infrastructure, Sync, Worker, and WebDashboard projects build successfully.
 
 ## v1 locked scope
 
@@ -39,10 +43,60 @@ Offline-first personal finance tracker with Telegram command ingest, MAUI Hybrid
 
 ## Suggested implementation order
 
-1. Implement domain entities and EF Core schema.
-2. Implement Telegram command parser and ingestion worker pipeline.
-3. Implement API auth and transaction/category endpoints.
-4. Implement sync endpoints and outbox processing.
-5. Implement MAUI local DB + offline CRUD + sync client.
-6. Implement dashboard API integration.
-7. Add integration tests for idempotency and sync conflict cases.
+1. Implement Telegram command parser and ingestion worker pipeline.
+2. Implement API auth and transaction/category endpoints.
+3. Implement sync endpoints and outbox processing.
+4. Implement MAUI local DB + offline CRUD + sync client.
+5. Implement dashboard API integration.
+6. Add integration tests for idempotency and sync conflict cases.
+
+## Database migrations
+
+Local EF tool is installed via `dotnet-tools.json`.
+
+Create migration:
+
+`dotnet dotnet-ef migrations add <MigrationName> --project src/PersonalFinanceOfflineTracker.Infrastructure/PersonalFinanceOfflineTracker.Infrastructure.csproj --startup-project src/PersonalFinanceOfflineTracker.Api/PersonalFinanceOfflineTracker.Api.csproj --context FinanceDbContext --output-dir Persistence/Migrations`
+
+Apply migration:
+
+`dotnet dotnet-ef database update --project src/PersonalFinanceOfflineTracker.Infrastructure/PersonalFinanceOfflineTracker.Infrastructure.csproj --startup-project src/PersonalFinanceOfflineTracker.Api/PersonalFinanceOfflineTracker.Api.csproj --context FinanceDbContext`
+
+## Run and test (current)
+
+### Web dashboard
+
+Run:
+
+`dotnet run --project src/PersonalFinanceOfflineTracker.Apps.WebDashboard/PersonalFinanceOfflineTracker.Apps.WebDashboard.csproj`
+
+Default local URL:
+
+`http://localhost:5000` or `https://localhost:5001` (depending on launch profile/port availability)
+
+### API
+
+Run:
+
+`dotnet run --project src/PersonalFinanceOfflineTracker.Api/PersonalFinanceOfflineTracker.Api.csproj`
+
+### Telegram worker
+
+Run:
+
+`dotnet run --project src/PersonalFinanceOfflineTracker.Workers.TelegramIngest/PersonalFinanceOfflineTracker.Workers.TelegramIngest.csproj`
+
+### MAUI Hybrid app
+
+Build (Windows target):
+
+`dotnet build src/PersonalFinanceOfflineTracker.Apps.Maui/PersonalFinanceOfflineTracker.Apps.Maui.csproj -f net10.0-windows10.0.19041.0`
+
+Run (Windows target):
+
+`dotnet run --project src/PersonalFinanceOfflineTracker.Apps.Maui/PersonalFinanceOfflineTracker.Apps.Maui.csproj -f net10.0-windows10.0.19041.0`
+
+Notes:
+
+- Android target may require additional local Android workload/tooling setup.
+- If build output is locked, stop any running worker/app process before rebuilding.

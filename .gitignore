@@ -34,6 +34,12 @@ packages/
 *.temp
 *.cache
 
+# Local databases
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+
 # OS files
 .DS_Store
 Thumbs.db
