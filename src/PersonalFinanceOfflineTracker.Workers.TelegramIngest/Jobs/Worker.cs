@@ -5,7 +5,7 @@ namespace PersonalFinanceOfflineTracker.Workers.TelegramIngest.Jobs;
 
 public sealed class Worker(
     ITelegramUpdateSource updateSource,
-    ITelegramIngestService ingestService,
+    IServiceScopeFactory scopeFactory,
     ILogger<Worker> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -23,6 +23,8 @@ public sealed class Worker(
 
             foreach (TelegramUpdate update in updates.OrderBy(x => x.UpdateId))
             {
+                using var scope = scopeFactory.CreateScope();
+                var ingestService = scope.ServiceProvider.GetRequiredService<ITelegramIngestService>();
                 IngestOutcome outcome = await ingestService.IngestAsync(update, stoppingToken);
                 logger.LogInformation(
                     "update_id={UpdateId} status={Status} code={Code} message=\"{Message}\"",

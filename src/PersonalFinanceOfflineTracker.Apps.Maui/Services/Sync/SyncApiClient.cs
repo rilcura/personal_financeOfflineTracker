@@ -37,4 +37,23 @@ public sealed class SyncApiClient : ISyncApiClient
         var payload = await response.Content.ReadFromJsonAsync<SyncPushResponseDto>(cancellationToken: cancellationToken);
         return payload ?? new SyncPushResponseDto();
     }
+
+    public async Task<SyncPullResponseDto> PullAsync(
+        string accessToken,
+        string? cursor,
+        CancellationToken cancellationToken = default)
+    {
+        var path = string.IsNullOrWhiteSpace(cursor)
+            ? "/api/sync/pull"
+            : $"/api/sync/pull?cursor={Uri.EscapeDataString(cursor)}";
+
+        using var message = new HttpRequestMessage(HttpMethod.Get, path);
+        message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+
+        using var response = await _httpClient.SendAsync(message, cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        var payload = await response.Content.ReadFromJsonAsync<SyncPullResponseDto>(cancellationToken: cancellationToken);
+        return payload ?? new SyncPullResponseDto();
+    }
 }

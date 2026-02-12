@@ -9,4 +9,9 @@ public interface ISyncApiClient
         string userId,
         IReadOnlyList<SyncChangeDto> changes,
         CancellationToken cancellationToken = default);
+
+    Task<SyncPullResponseDto> PullAsync(
+        string accessToken,
+        string? cursor,
+        CancellationToken cancellationToken = default);
 }

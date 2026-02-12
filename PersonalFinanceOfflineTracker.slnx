@@ -9,4 +9,7 @@
     <Project Path="src/PersonalFinanceOfflineTracker.Sync/PersonalFinanceOfflineTracker.Sync.csproj" />
     <Project Path="src/PersonalFinanceOfflineTracker.Workers.TelegramIngest/PersonalFinanceOfflineTracker.Workers.TelegramIngest.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/PersonalFinanceOfflineTracker.Tests/PersonalFinanceOfflineTracker.Tests.csproj" />
+  </Folder>
 </Solution>

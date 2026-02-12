@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using PersonalFinanceOfflineTracker.Apps.Maui.Services.Ledger;
 using PersonalFinanceOfflineTracker.Apps.Maui.Services.Sync;
 
 namespace PersonalFinanceOfflineTracker.Apps.Maui;
@@ -19,6 +20,8 @@ public static class MauiProgram
 
         var syncOptions = new SyncClientOptions();
         builder.Services.AddSingleton(syncOptions);
+        builder.Services.AddSingleton<ILocalLedgerStore, SqliteLocalLedgerStore>();
+        builder.Services.AddSingleton<ILocalLedgerService, LocalLedgerService>();
         builder.Services.AddSingleton<ISyncOutboxStore, SqliteSyncOutboxStore>();
         builder.Services.AddSingleton<ISyncTokenStore, SecureStorageSyncTokenStore>();
         builder.Services.AddSingleton<ISyncOutboxService, SyncOutboxService>();

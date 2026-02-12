@@ -1,0 +1,230 @@
+@page "/ledger"
+@using PersonalFinanceOfflineTracker.Apps.Maui.Models.Ledger
+@using PersonalFinanceOfflineTracker.Apps.Maui.Services.Ledger
+@inject ILocalLedgerService LedgerService
+
+<h1>Local Ledger</h1>
+
+<p>Offline-first local CRUD. Every mutation is saved locally and queued to outbox automatically.</p>
+
+<h3>Category</h3>
+<div class="mb-2">
+    <label>Name</label>
+    <input class="form-control" @bind="CategoryName" />
+</div>
+<button class="btn btn-primary me-2" @onclick="SaveCategoryAsync">@(string.IsNullOrWhiteSpace(EditingCategoryId) ? "Create Category" : "Update Category")</button>
+@if (!string.IsNullOrWhiteSpace(EditingCategoryId))
+{
+    <button class="btn btn-outline-secondary me-2" @onclick="CancelCategoryEdit">Cancel Edit</button>
+}
+
+<h3 class="mt-4">Transaction</h3>
+<div class="mb-2">
+    <label>Amount</label>
+    <input class="form-control" type="number" step="0.01" @bind="TransactionAmount" />
+</div>
+<div class="mb-2">
+    <label>Description</label>
+    <input class="form-control" @bind="TransactionDescription" />
+</div>
+<div class="mb-2">
+    <label>Date (yyyy-MM-dd)</label>
+    <input class="form-control" @bind="TransactionDateInput" />
+</div>
+<div class="mb-2">
+    <label>Category Id (optional)</label>
+    <input class="form-control" @bind="SelectedCategoryId" />
+</div>
+<button class="btn btn-primary me-2" @onclick="SaveTransactionAsync">@(string.IsNullOrWhiteSpace(EditingTransactionId) ? "Create Transaction" : "Update Transaction")</button>
+@if (!string.IsNullOrWhiteSpace(EditingTransactionId))
+{
+    <button class="btn btn-outline-secondary me-2" @onclick="CancelTransactionEdit">Cancel Edit</button>
+}
+
+<hr />
+<h3>Categories</h3>
+@if (Categories.Count == 0)
+{
+    <p>No local categories yet.</p>
+}
+else
+{
+    <table class="table table-sm">
+        <thead>
+            <tr><th>Id</th><th>Name</th><th></th></tr>
+        </thead>
+        <tbody>
+        @foreach (var c in Categories)
+        {
+            <tr>
+                <td>@c.Id</td>
+                <td>@c.Name</td>
+                <td>
+                    <button class="btn btn-outline-secondary btn-sm me-2" @onclick="() => UseCategory(c)">Use</button>
+                    <button class="btn btn-outline-primary btn-sm me-2" @onclick="() => EditCategory(c)">Edit</button>
+                    <button class="btn btn-outline-danger btn-sm" @onclick="() => DeleteCategoryAsync(c.Id)">Delete</button>
+                </td>
+            </tr>
+        }
+        </tbody>
+    </table>
+}
+
+<h3 class="mt-4">Transactions</h3>
+@if (Transactions.Count == 0)
+{
+    <p>No local transactions yet.</p>
+}
+else
+{
+    <table class="table table-sm">
+        <thead>
+            <tr><th>Date</th><th>Description</th><th>Amount</th><th>CategoryId</th><th></th></tr>
+        </thead>
+        <tbody>
+        @foreach (var t in Transactions)
+        {
+            <tr>
+                <td>@t.TransactionDate.ToString("yyyy-MM-dd")</td>
+                <td>@t.Description</td>
+                <td>@t.Amount.ToString("0.00")</td>
+                <td>@(t.CategoryId ?? "-")</td>
+                <td>
+                    <button class="btn btn-outline-primary btn-sm me-2" @onclick="() => EditTransaction(t)">Edit</button>
+                    <button class="btn btn-outline-danger btn-sm" @onclick="() => DeleteTransactionAsync(t.Id)">Delete</button>
+                </td>
+            </tr>
+        }
+        </tbody>
+    </table>
+}
+
+<p><strong>Status:</strong> @StatusMessage</p>
+
+@code {
+    private string CategoryName { get; set; } = "General";
+    private decimal TransactionAmount { get; set; } = 100m;
+    private string TransactionDescription { get; set; } = "Offline entry";
+    private string TransactionDateInput { get; set; } = DateOnly.FromDateTime(DateTime.Today).ToString("yyyy-MM-dd");
+    private string? SelectedCategoryId { get; set; }
+    private string? EditingCategoryId { get; set; }
+    private string? EditingTransactionId { get; set; }
+
+    private List<LocalCategoryRecord> Categories { get; set; } = [];
+    private List<LocalTransactionRecord> Transactions { get; set; } = [];
+    private string StatusMessage { get; set; } = "Ready.";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshAsync();
+    }
+
+    private async Task SaveCategoryAsync()
+    {
+        try
+        {
+            var saved = await LedgerService.SaveCategoryAsync(CategoryName, EditingCategoryId);
+            StatusMessage = $"Saved local category: {saved.Id}";
+            CancelCategoryEdit();
+            await RefreshAsync();
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = ex.Message;
+        }
+    }
+
+    private async Task SaveTransactionAsync()
+    {
+        if (!DateOnly.TryParse(TransactionDateInput, out var date))
+        {
+            StatusMessage = "Invalid date format.";
+            return;
+        }
+
+        try
+        {
+            var saved = await LedgerService.SaveTransactionAsync(
+                TransactionAmount,
+                TransactionDescription,
+                date,
+                SelectedCategoryId,
+                EditingTransactionId);
+            StatusMessage = $"Saved local transaction: {saved.Id}";
+            CancelTransactionEdit();
+            await RefreshAsync();
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = ex.Message;
+        }
+    }
+
+    private async Task DeleteCategoryAsync(string id)
+    {
+        try
+        {
+            await LedgerService.DeleteCategoryAsync(id);
+            StatusMessage = $"Deleted category: {id}";
+            await RefreshAsync();
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = ex.Message;
+        }
+    }
+
+    private async Task DeleteTransactionAsync(string id)
+    {
+        try
+        {
+            await LedgerService.DeleteTransactionAsync(id);
+            StatusMessage = $"Deleted transaction: {id}";
+            await RefreshAsync();
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = ex.Message;
+        }
+    }
+
+    private void UseCategory(LocalCategoryRecord category)
+    {
+        SelectedCategoryId = category.Id;
+        CategoryName = category.Name;
+        StatusMessage = $"Selected category {category.Id} for transaction.";
+    }
+
+    private void EditCategory(LocalCategoryRecord category)
+    {
+        EditingCategoryId = category.Id;
+        CategoryName = category.Name;
+        StatusMessage = $"Editing category {category.Id}.";
+    }
+
+    private void CancelCategoryEdit()
+    {
+        EditingCategoryId = null;
+    }
+
+    private void EditTransaction(LocalTransactionRecord tx)
+    {
+        EditingTransactionId = tx.Id;
+        TransactionAmount = tx.Amount;
+        TransactionDescription = tx.Description;
+        TransactionDateInput = tx.TransactionDate.ToString("yyyy-MM-dd");
+        SelectedCategoryId = tx.CategoryId;
+        StatusMessage = $"Editing transaction {tx.Id}.";
+    }
+
+    private void CancelTransactionEdit()
+    {
+        EditingTransactionId = null;
+    }
+
+    private async Task RefreshAsync()
+    {
+        Categories = (await LedgerService.GetCategoriesAsync()).ToList();
+        Transactions = (await LedgerService.GetTransactionsAsync()).ToList();
+    }
+}

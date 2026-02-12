@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using PersonalFinanceOfflineTracker.Apps.Maui.Services.Ledger;
 using PersonalFinanceOfflineTracker.Sync.Models;
 
 namespace PersonalFinanceOfflineTracker.Apps.Maui.Services.Sync;
@@ -7,6 +8,7 @@ namespace PersonalFinanceOfflineTracker.Apps.Maui.Services.Sync;
 public sealed class SyncBackgroundWorker : ISyncBackgroundWorker
 {
     private readonly ISyncOutboxStore _outboxStore;
+    private readonly ILocalLedgerStore _ledgerStore;
     private readonly ISyncTokenStore _tokenStore;
     private readonly ISyncApiClient _syncApiClient;
     private readonly SyncClientOptions _options;
@@ -19,12 +21,14 @@ public sealed class SyncBackgroundWorker : ISyncBackgroundWorker
 
     public SyncBackgroundWorker(
         ISyncOutboxStore outboxStore,
+        ILocalLedgerStore ledgerStore,
         ISyncTokenStore tokenStore,
         ISyncApiClient syncApiClient,
         SyncClientOptions options,
         ILogger<SyncBackgroundWorker> logger)
     {
         _outboxStore = outboxStore;
+        _ledgerStore = ledgerStore;
         _tokenStore = tokenStore;
         _syncApiClient = syncApiClient;
         _options = options;
@@ -70,6 +74,7 @@ public sealed class SyncBackgroundWorker : ISyncBackgroundWorker
     private async Task RunLoopAsync(CancellationToken cancellationToken)
     {
         await _outboxStore.InitializeAsync(cancellationToken);
+        await _ledgerStore.InitializeAsync(cancellationToken);
 
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(_options.PollIntervalSeconds));
         while (await timer.WaitForNextTickAsync(cancellationToken))
@@ -107,72 +112,86 @@ public sealed class SyncBackgroundWorker : ISyncBackgroundWorker
 
             var now = DateTime.UtcNow;
             var leased = await _outboxStore.LeasePendingBatchAsync(_options.PushBatchSize, now, cancellationToken);
-            if (leased.Count == 0)
+            if (leased.Count > 0)
             {
-                return;
-            }
-
-            IReadOnlyList<SyncChangeDto> changes;
-            try
-            {
-                changes = leased.Select(x => JsonSerializer.Deserialize<SyncChangeDto>(x.PayloadJson))
-                    .Where(x => x is not null)
-                    .Cast<SyncChangeDto>()
-                    .ToList();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Failed to deserialize outbox payload.");
-                foreach (var item in leased)
+                IReadOnlyList<SyncChangeDto> changes;
+                try
                 {
-                    await _outboxStore.MarkFailedAsync(item.Id, "Invalid payload", DateTime.UtcNow, cancellationToken);
+                    changes = leased.Select(x => JsonSerializer.Deserialize<SyncChangeDto>(x.PayloadJson))
+                        .Where(x => x is not null)
+                        .Cast<SyncChangeDto>()
+                        .ToList();
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to deserialize outbox payload.");
+                    foreach (var item in leased)
+                    {
+                        await _outboxStore.MarkFailedAsync(item.Id, "Invalid payload", DateTime.UtcNow, cancellationToken);
+                    }
+
+                    return;
                 }
 
-                return;
-            }
-
-            try
-            {
-                var response = await _syncApiClient.PushAsync(accessToken, userId, changes, cancellationToken);
-
-                var acceptedChangeIds = response.AcceptedItems.Select(x => x.ChangeId).ToHashSet(StringComparer.Ordinal);
-                var leasedByChangeId = leased.ToDictionary(
-                    x => JsonSerializer.Deserialize<SyncChangeDto>(x.PayloadJson)?.ChangeId ?? string.Empty,
-                    x => x,
-                    StringComparer.Ordinal);
-
-                var succeededIds = acceptedChangeIds
-                    .Where(leasedByChangeId.ContainsKey)
-                    .Select(changeId => leasedByChangeId[changeId].Id)
-                    .ToList();
-
-                if (succeededIds.Count > 0)
+                try
                 {
-                    await _outboxStore.MarkSucceededAsync(succeededIds, cancellationToken);
+                    var response = await _syncApiClient.PushAsync(accessToken, userId, changes, cancellationToken);
+
+                    var acceptedChangeIds = response.AcceptedItems.Select(x => x.ChangeId).ToHashSet(StringComparer.Ordinal);
+                    var leasedByChangeId = leased.ToDictionary(
+                        x => JsonSerializer.Deserialize<SyncChangeDto>(x.PayloadJson)?.ChangeId ?? string.Empty,
+                        x => x,
+                        StringComparer.Ordinal);
+
+                    var succeededIds = acceptedChangeIds
+                        .Where(leasedByChangeId.ContainsKey)
+                        .Select(changeId => leasedByChangeId[changeId].Id)
+                        .ToList();
+
+                    if (succeededIds.Count > 0)
+                    {
+                        await _outboxStore.MarkSucceededAsync(succeededIds, cancellationToken);
+                    }
+
+                    var rejected = response.RejectedItems.Where(x => leasedByChangeId.ContainsKey(x.ChangeId));
+                    foreach (var item in rejected)
+                    {
+                        await _outboxStore.MarkFailedAsync(
+                            leasedByChangeId[item.ChangeId].Id,
+                            item.Reason,
+                            DateTime.UtcNow,
+                            cancellationToken);
+                    }
                 }
-
-                var rejected = response.RejectedItems.Where(x => leasedByChangeId.ContainsKey(x.ChangeId));
-                foreach (var item in rejected)
+                catch (Exception ex)
                 {
-                    await _outboxStore.MarkFailedAsync(
-                        leasedByChangeId[item.ChangeId].Id,
-                        item.Reason,
-                        DateTime.UtcNow,
-                        cancellationToken);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Sync push failed.");
-                foreach (var item in leased)
-                {
-                    await _outboxStore.MarkFailedAsync(item.Id, ex.Message, DateTime.UtcNow, cancellationToken);
+                    _logger.LogWarning(ex, "Sync push failed.");
+                    foreach (var item in leased)
+                    {
+                        await _outboxStore.MarkFailedAsync(item.Id, ex.Message, DateTime.UtcNow, cancellationToken);
+                    }
                 }
             }
+
+            await PullAndApplyAsync(accessToken, userId, cancellationToken);
         }
         finally
         {
             _cycleGate.Release();
+        }
+    }
+
+    private async Task PullAndApplyAsync(string accessToken, string userId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var cursor = await _ledgerStore.GetSyncCursorAsync(userId, cancellationToken);
+            var pull = await _syncApiClient.PullAsync(accessToken, cursor, cancellationToken);
+            await _ledgerStore.ApplySyncChangesAsync(userId, pull.Changes, pull.NextCursor, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Sync pull/apply failed.");
         }
     }
 }

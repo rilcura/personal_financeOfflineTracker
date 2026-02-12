@@ -15,6 +15,10 @@ Offline-first personal finance tracker with Telegram command ingest, MAUI Hybrid
 - Sync service is now DB-backed (no in-memory sync state).
 - MAUI app now has local SQLite outbox infrastructure and a background sync worker scaffold.
 - MAUI Sync Lab UI is wired to enqueue category/transaction upsert/delete sync changes into the local outbox.
+- MAUI local ledger SQLite store + CRUD UI is implemented (`/ledger`) with automatic outbox enqueue per mutation.
+- MAUI background sync now performs push and pull/apply into local ledger DB.
+- Telegram ingest worker now persists via `FinanceDbContext` (idempotent `update_id`, command parser, transaction creation) and supports Bot API long polling when token is configured.
+- Baseline automated tests are added for auth services, parser, idempotent ingest, LWW conflicts, and tombstones.
 - API, Domain, Infrastructure, Sync, Worker, and WebDashboard projects build successfully.
 
 ## v1 locked scope
@@ -48,11 +52,10 @@ Offline-first personal finance tracker with Telegram command ingest, MAUI Hybrid
 
 ## Suggested implementation order
 
-1. Implement Telegram command parser and ingestion worker pipeline.
-2. Wire MAUI UI flows to enqueue sync changes through the outbox service.
-3. Implement MAUI local transaction/category storage and offline CRUD screens.
-4. Implement dashboard API integration.
-5. Add integration tests for idempotency and sync conflict cases.
+1. Implement dashboard API integration.
+2. Add Telegram worker integration tests for Bot API source and full ingest transaction behavior.
+3. Add MAUI UX polish for ledger editing/filtering and outbox monitor visibility.
+4. Harden security settings for production secrets and token rotation.
 
 ## Database migrations
 
@@ -112,6 +115,11 @@ Run:
 
 `dotnet run --project src/PersonalFinanceOfflineTracker.Workers.TelegramIngest/PersonalFinanceOfflineTracker.Workers.TelegramIngest.csproj`
 
+Notes:
+
+- Configure `Telegram:BotToken` in `src/PersonalFinanceOfflineTracker.Workers.TelegramIngest/appsettings.json` (or user-secrets/env var) to enable real Bot API long polling.
+- If token is empty, worker falls back to in-memory update source for local testing.
+
 ### MAUI Hybrid app
 
 Build (Windows target):
@@ -129,3 +137,10 @@ Notes:
 - MAUI local sync worker now runs on app startup and reads pending outbox rows from `local_sync.db` in app data.
 - To enable authenticated push from MAUI, store API token/session through `ISyncTokenStore` (`sync_access_token`, `sync_user_id` keys).
 - Use the **Sync Lab** menu page to login and enqueue test upsert/delete changes for categories and transactions.
+- Use the **Ledger** menu page for local offline CRUD (categories/transactions). Changes are persisted locally and queued for sync automatically.
+
+### Tests
+
+Run:
+
+`dotnet test tests/PersonalFinanceOfflineTracker.Tests/PersonalFinanceOfflineTracker.Tests.csproj`
