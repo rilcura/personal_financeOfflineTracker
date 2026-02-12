@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/PersonalFinanceOfflineTracker.Api/PersonalFinanceOfflineTracker.Api.csproj" />
+    <Project Path="src/PersonalFinanceOfflineTracker.Apps.Maui/PersonalFinanceOfflineTracker.Apps.Maui.csproj" />
+    <Project Path="src/PersonalFinanceOfflineTracker.Apps.WebDashboard/PersonalFinanceOfflineTracker.Apps.WebDashboard.csproj" />
+    <Project Path="src/PersonalFinanceOfflineTracker.Domain/PersonalFinanceOfflineTracker.Domain.csproj" />
+    <Project Path="src/PersonalFinanceOfflineTracker.Infrastructure/PersonalFinanceOfflineTracker.Infrastructure.csproj" />
+    <Project Path="src/PersonalFinanceOfflineTracker.Shared/PersonalFinanceOfflineTracker.Shared.csproj" />
+    <Project Path="src/PersonalFinanceOfflineTracker.Sync/PersonalFinanceOfflineTracker.Sync.csproj" />
+    <Project Path="src/PersonalFinanceOfflineTracker.Workers.TelegramIngest/PersonalFinanceOfflineTracker.Workers.TelegramIngest.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,36 @@
+@PersonalFinanceOfflineTracker.Api_HostAddress = http://localhost:5283
+
+POST {{PersonalFinanceOfflineTracker.Api_HostAddress}}/api/sync/push
+Accept: application/json
+Content-Type: application/json
+
+{
+  "userId": "user-1",
+  "changes": [
+    {
+      "changeId": "change-1",
+      "entityType": "Category",
+      "operation": "Upsert",
+      "entityId": "cat-1",
+      "updatedAt": "2026-02-12T12:00:00Z",
+      "category": {
+        "id": "cat-1",
+        "userId": "user-1",
+        "name": "Food",
+        "normalizedName": "FOOD",
+        "createdAt": "2026-02-12T12:00:00Z",
+        "updatedAt": "2026-02-12T12:00:00Z",
+        "isDeleted": false,
+        "deletedAt": null,
+        "source": "App"
+      }
+    }
+  ]
+}
+
+###
+
+GET {{PersonalFinanceOfflineTracker.Api_HostAddress}}/api/sync/pull?userId=user-1
+Accept: application/json
+
+###
