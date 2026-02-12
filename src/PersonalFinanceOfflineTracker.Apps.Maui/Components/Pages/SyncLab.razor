@@ -1,0 +1,282 @@
+@page "/sync-lab"
+@using System.Net.Http.Json
+@using PersonalFinanceOfflineTracker.Apps.Maui.Services.Sync
+@using PersonalFinanceOfflineTracker.Sync.Models
+@inject HttpClient Http
+@inject ISyncTokenStore TokenStore
+@inject ISyncOutboxService OutboxService
+
+<h1>Sync Lab</h1>
+
+<p>Use this page to authenticate and enqueue outbox sync actions from MAUI.</p>
+
+<h3>Session</h3>
+<div class="mb-2">
+    <label>Email</label>
+    <input class="form-control" @bind="LoginEmail" />
+</div>
+<div class="mb-2">
+    <label>Password</label>
+    <input class="form-control" type="password" @bind="LoginPassword" />
+</div>
+<button class="btn btn-primary me-2" @onclick="LoginAsync">Login</button>
+<span>@SessionStatus</span>
+
+<hr />
+
+<h3>Category Upsert</h3>
+<div class="mb-2">
+    <label>Category Id (blank = new)</label>
+    <input class="form-control" @bind="CategoryIdInput" />
+</div>
+<div class="mb-2">
+    <label>Name</label>
+    <input class="form-control" @bind="CategoryName" />
+</div>
+<button class="btn btn-success me-2" @onclick="EnqueueCategoryUpsertAsync">Enqueue Category Upsert</button>
+
+<h3 class="mt-4">Category Delete</h3>
+<div class="mb-2">
+    <label>Category Id</label>
+    <input class="form-control" @bind="DeleteCategoryId" />
+</div>
+<button class="btn btn-warning me-2" @onclick="EnqueueCategoryDeleteAsync">Enqueue Category Delete</button>
+
+<hr />
+
+<h3>Transaction Upsert</h3>
+<div class="mb-2">
+    <label>Transaction Id (blank = new)</label>
+    <input class="form-control" @bind="TransactionIdInput" />
+</div>
+<div class="mb-2">
+    <label>Amount</label>
+    <input class="form-control" type="number" step="0.01" @bind="TransactionAmount" />
+</div>
+<div class="mb-2">
+    <label>Description</label>
+    <input class="form-control" @bind="TransactionDescription" />
+</div>
+<div class="mb-2">
+    <label>Transaction Date</label>
+    <input class="form-control" @bind="TransactionDateInput" placeholder="yyyy-MM-dd" />
+</div>
+<div class="mb-2">
+    <label>Category Id (optional)</label>
+    <input class="form-control" @bind="TransactionCategoryId" />
+</div>
+<button class="btn btn-success me-2" @onclick="EnqueueTransactionUpsertAsync">Enqueue Transaction Upsert</button>
+
+<h3 class="mt-4">Transaction Delete</h3>
+<div class="mb-2">
+    <label>Transaction Id</label>
+    <input class="form-control" @bind="DeleteTransactionId" />
+</div>
+<button class="btn btn-warning me-2" @onclick="EnqueueTransactionDeleteAsync">Enqueue Transaction Delete</button>
+
+<hr />
+<p><strong>Status:</strong> @StatusMessage</p>
+
+@code {
+    private string LoginEmail { get; set; } = "owner@local.dev";
+    private string LoginPassword { get; set; } = "P@ssword123!";
+    private string SessionStatus { get; set; } = "Not logged in";
+
+    private string CategoryIdInput { get; set; } = string.Empty;
+    private string CategoryName { get; set; } = "Groceries";
+    private string DeleteCategoryId { get; set; } = string.Empty;
+
+    private string TransactionIdInput { get; set; } = string.Empty;
+    private decimal TransactionAmount { get; set; } = 120.50m;
+    private string TransactionDescription { get; set; } = "Weekly groceries";
+    private string TransactionDateInput { get; set; } = DateOnly.FromDateTime(DateTime.Today).ToString("yyyy-MM-dd");
+    private string TransactionCategoryId { get; set; } = string.Empty;
+    private string DeleteTransactionId { get; set; } = string.Empty;
+
+    private string StatusMessage { get; set; } = "Ready.";
+
+    private string? _userId;
+    private string? _accessToken;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _userId = await TokenStore.GetUserIdAsync();
+        _accessToken = await TokenStore.GetAccessTokenAsync();
+        SessionStatus = string.IsNullOrWhiteSpace(_userId) ? "Not logged in" : $"Logged in as {_userId}";
+    }
+
+    private async Task LoginAsync()
+    {
+        try
+        {
+            var response = await Http.PostAsJsonAsync("/api/auth/login", new
+            {
+                email = LoginEmail.Trim(),
+                password = LoginPassword
+            });
+
+            if (!response.IsSuccessStatusCode)
+            {
+                SessionStatus = $"Login failed: {(int)response.StatusCode}";
+                return;
+            }
+
+            var payload = await response.Content.ReadFromJsonAsync<LoginResponse>();
+            if (payload is null || string.IsNullOrWhiteSpace(payload.AccessToken) || string.IsNullOrWhiteSpace(payload.UserId))
+            {
+                SessionStatus = "Login failed: invalid payload.";
+                return;
+            }
+
+            _accessToken = payload.AccessToken;
+            _userId = payload.UserId;
+            await TokenStore.SetSessionAsync(payload.AccessToken, payload.UserId);
+            SessionStatus = $"Logged in as {payload.Email}";
+            StatusMessage = "Session saved to secure storage.";
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Login error: {ex.Message}";
+        }
+    }
+
+    private async Task EnqueueCategoryUpsertAsync()
+    {
+        if (!EnsureSession()) return;
+
+        var id = string.IsNullOrWhiteSpace(CategoryIdInput) ? Guid.NewGuid().ToString() : CategoryIdInput.Trim();
+        var now = DateTime.UtcNow;
+
+        var change = new SyncChangeDto
+        {
+            ChangeId = Guid.NewGuid().ToString(),
+            EntityType = SyncEntityType.Category,
+            Operation = SyncOperationType.Upsert,
+            EntityId = id,
+            UpdatedAt = now,
+            Category = new CategorySyncDto
+            {
+                Id = id,
+                UserId = _userId!,
+                Name = CategoryName.Trim(),
+                NormalizedName = CategoryName.Trim().ToUpperInvariant(),
+                CreatedAt = now,
+                UpdatedAt = now,
+                IsDeleted = false,
+                DeletedAt = null,
+                Source = "App"
+            }
+        };
+
+        await OutboxService.EnqueueChangeAsync(change);
+        CategoryIdInput = id;
+        StatusMessage = $"Queued category upsert: {id}";
+    }
+
+    private async Task EnqueueCategoryDeleteAsync()
+    {
+        if (!EnsureSession()) return;
+        if (string.IsNullOrWhiteSpace(DeleteCategoryId))
+        {
+            StatusMessage = "Category delete requires Category Id.";
+            return;
+        }
+
+        var now = DateTime.UtcNow;
+        var change = new SyncChangeDto
+        {
+            ChangeId = Guid.NewGuid().ToString(),
+            EntityType = SyncEntityType.Category,
+            Operation = SyncOperationType.Delete,
+            EntityId = DeleteCategoryId.Trim(),
+            UpdatedAt = now,
+            DeletedAt = now
+        };
+
+        await OutboxService.EnqueueChangeAsync(change);
+        StatusMessage = $"Queued category delete: {DeleteCategoryId.Trim()}";
+    }
+
+    private async Task EnqueueTransactionUpsertAsync()
+    {
+        if (!EnsureSession()) return;
+
+        if (!DateOnly.TryParse(TransactionDateInput, out var txDate))
+        {
+            StatusMessage = "Invalid transaction date.";
+            return;
+        }
+
+        var id = string.IsNullOrWhiteSpace(TransactionIdInput) ? Guid.NewGuid().ToString() : TransactionIdInput.Trim();
+        var now = DateTime.UtcNow;
+
+        var change = new SyncChangeDto
+        {
+            ChangeId = Guid.NewGuid().ToString(),
+            EntityType = SyncEntityType.Transaction,
+            Operation = SyncOperationType.Upsert,
+            EntityId = id,
+            UpdatedAt = now,
+            Transaction = new TransactionSyncDto
+            {
+                Id = id,
+                UserId = _userId!,
+                CategoryId = string.IsNullOrWhiteSpace(TransactionCategoryId) ? null : TransactionCategoryId.Trim(),
+                Amount = TransactionAmount,
+                Description = TransactionDescription.Trim(),
+                TransactionDate = txDate,
+                CreatedAt = now,
+                UpdatedAt = now,
+                IsDeleted = false,
+                DeletedAt = null,
+                Source = "App"
+            }
+        };
+
+        await OutboxService.EnqueueChangeAsync(change);
+        TransactionIdInput = id;
+        StatusMessage = $"Queued transaction upsert: {id}";
+    }
+
+    private async Task EnqueueTransactionDeleteAsync()
+    {
+        if (!EnsureSession()) return;
+        if (string.IsNullOrWhiteSpace(DeleteTransactionId))
+        {
+            StatusMessage = "Transaction delete requires Transaction Id.";
+            return;
+        }
+
+        var now = DateTime.UtcNow;
+        var change = new SyncChangeDto
+        {
+            ChangeId = Guid.NewGuid().ToString(),
+            EntityType = SyncEntityType.Transaction,
+            Operation = SyncOperationType.Delete,
+            EntityId = DeleteTransactionId.Trim(),
+            UpdatedAt = now,
+            DeletedAt = now
+        };
+
+        await OutboxService.EnqueueChangeAsync(change);
+        StatusMessage = $"Queued transaction delete: {DeleteTransactionId.Trim()}";
+    }
+
+    private bool EnsureSession()
+    {
+        if (!string.IsNullOrWhiteSpace(_userId) && !string.IsNullOrWhiteSpace(_accessToken))
+        {
+            return true;
+        }
+
+        StatusMessage = "Please login first.";
+        return false;
+    }
+
+    private sealed record LoginResponse
+    {
+        public string AccessToken { get; init; } = string.Empty;
+        public string UserId { get; init; } = string.Empty;
+        public string Email { get; init; } = string.Empty;
+    }
+}
