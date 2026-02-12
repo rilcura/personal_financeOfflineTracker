@@ -14,6 +14,7 @@ Offline-first personal finance tracker with Telegram command ingest, MAUI Hybrid
 - Authenticated categories and transactions endpoints are implemented with EF Core persistence.
 - Sync service is now DB-backed (no in-memory sync state).
 - MAUI app now has local SQLite outbox infrastructure and a background sync worker scaffold.
+- MAUI Sync Lab UI is wired to enqueue category/transaction upsert/delete sync changes into the local outbox.
 - API, Domain, Infrastructure, Sync, Worker, and WebDashboard projects build successfully.
 
 ## v1 locked scope
@@ -127,3 +128,4 @@ Notes:
 - If build output is locked, stop any running worker/app process before rebuilding.
 - MAUI local sync worker now runs on app startup and reads pending outbox rows from `local_sync.db` in app data.
 - To enable authenticated push from MAUI, store API token/session through `ISyncTokenStore` (`sync_access_token`, `sync_user_id` keys).
+- Use the **Sync Lab** menu page to login and enqueue test upsert/delete changes for categories and transactions.
