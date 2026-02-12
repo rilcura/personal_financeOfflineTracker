@@ -1,7 +1,19 @@
-﻿@page "/"
+@using PersonalFinanceOfflineTracker.Apps.WebDashboard.Services
+@inject AuthSession AuthSession
 
-<PageTitle>Home</PageTitle>
+@page "/"
 
-<h1>Hello, world!</h1>
+<PageTitle>Overview</PageTitle>
 
-Welcome to your new app.
+<h1>Dashboard Overview</h1>
+
+@if (AuthSession.IsAuthenticated)
+{
+    <p class="text-success">Signed in as <strong>@AuthSession.Email</strong>.</p>
+    <p>Use <a href="/transactions">Transactions</a> and <a href="/categories">Categories</a> to manage data.</p>
+}
+else
+{
+    <p class="text-warning">You are not signed in.</p>
+    <p><a href="/login">Login</a> to start using API-backed pages.</p>
+}

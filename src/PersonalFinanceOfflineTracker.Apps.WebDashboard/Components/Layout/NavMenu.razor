@@ -1,6 +1,19 @@
-﻿<div class="top-row ps-3 navbar navbar-dark">
+@using PersonalFinanceOfflineTracker.Apps.WebDashboard.Services
+@inject AuthSession AuthSession
+@inject AuthApiClient AuthApiClient
+@inject NavigationManager NavigationManager
+@implements IDisposable
+
+<div class="top-row ps-3 navbar navbar-dark">
     <div class="container-fluid">
-        <a class="navbar-brand" href="">PersonalFinanceOfflineTracker.Apps.WebDashboard</a>
+        <a class="navbar-brand" href="">Finance Dashboard</a>
+        @if (AuthSession.IsAuthenticated)
+        {
+            <div class="d-flex align-items-center gap-2 text-white small">
+                <span>@AuthSession.DisplayName</span>
+                <button class="btn btn-sm btn-outline-light" @onclick="Logout">Logout</button>
+            </div>
+        }
     </div>
 </div>
 
@@ -10,21 +23,49 @@
     <nav class="nav flex-column">
         <div class="nav-item px-3">
             <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
-                <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Home
+                <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Overview
             </NavLink>
         </div>
 
         <div class="nav-item px-3">
-            <NavLink class="nav-link" href="counter">
-                <span class="bi bi-plus-square-fill-nav-menu" aria-hidden="true"></span> Counter
+            <NavLink class="nav-link" href="login">
+                <span class="bi bi-person-fill-nav-menu" aria-hidden="true"></span> Login
             </NavLink>
         </div>
 
         <div class="nav-item px-3">
-            <NavLink class="nav-link" href="weather">
-                <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Weather
+            <NavLink class="nav-link" href="transactions">
+                <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Transactions
+            </NavLink>
+        </div>
+
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="categories">
+                <span class="bi bi-plus-square-fill-nav-menu" aria-hidden="true"></span> Categories
             </NavLink>
         </div>
     </nav>
 </div>
 
+@code {
+    protected override void OnInitialized()
+    {
+        AuthSession.Changed += OnAuthChanged;
+    }
+
+    private void Logout()
+    {
+        AuthApiClient.Logout();
+        NavigationManager.NavigateTo("/login");
+    }
+
+    private void OnAuthChanged()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        AuthSession.Changed -= OnAuthChanged;
+    }
+}

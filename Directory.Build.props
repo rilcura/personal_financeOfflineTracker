@@ -1,0 +1,12 @@
+<Project>
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'PersonalFinanceOfflineTracker.Apps.Maui' and '$(TargetFramework)' == 'net10.0-android'">
+    <!--
+      Work around Android AAPT2 path parsing issues on Windows user paths with spaces.
+      Keep Android obj/bin under a no-space absolute path.
+    -->
+    <BaseIntermediateOutputPath>$(SystemDrive)\pfot-build\$(MSBuildProjectName)\obj\</BaseIntermediateOutputPath>
+    <MSBuildProjectExtensionsPath>$(BaseIntermediateOutputPath)</MSBuildProjectExtensionsPath>
+    <BaseOutputPath>$(SystemDrive)\pfot-build\$(MSBuildProjectName)\bin\</BaseOutputPath>
+    <DefaultItemExcludes>$(DefaultItemExcludes);$(MSBuildProjectDirectory)\obj\**;$(MSBuildProjectDirectory)\bin\**</DefaultItemExcludes>
+  </PropertyGroup>
+</Project>

@@ -1,0 +1,238 @@
+@using PersonalFinanceOfflineTracker.Apps.WebDashboard.Services
+@inject CategoriesApiClient CategoriesApiClient
+@inject AuthSession AuthSession
+@inject NavigationManager NavigationManager
+
+@page "/categories"
+@rendermode InteractiveServer
+
+<PageTitle>Categories</PageTitle>
+
+<h1>Categories</h1>
+
+@if (!AuthSession.IsAuthenticated)
+{
+    <div class="alert alert-warning">
+        Please <a href="/login">login</a> first.
+    </div>
+}
+else
+{
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <div class="alert alert-danger">@errorMessage</div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(successMessage))
+    {
+        <div class="alert alert-success">@successMessage</div>
+    }
+
+    <EditForm Model="createModel" OnValidSubmit="CreateAsync">
+        <div class="row g-2 align-items-end">
+            <div class="col-sm-8 col-md-6">
+                <label class="form-label" for="newCategory">New category</label>
+                <InputText id="newCategory" class="form-control" @bind-Value="createModel.Name" />
+            </div>
+            <div class="col-sm-4 col-md-3">
+                <button class="btn btn-primary w-100" type="submit" disabled="@isBusy">Add</button>
+            </div>
+        </div>
+    </EditForm>
+
+    <hr />
+
+    @if (isLoading)
+    {
+        <p><em>Loading categories...</em></p>
+    }
+    else if (categories.Count == 0)
+    {
+        <p>No categories yet.</p>
+    }
+    else
+    {
+        <table class="table table-sm table-striped align-middle">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Updated</th>
+                    <th style="width: 220px;">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var item in categories)
+                {
+                    <tr>
+                        <td>
+                            @if (editingId == item.Id)
+                            {
+                                <input class="form-control form-control-sm" @bind="editName" />
+                            }
+                            else
+                            {
+                                @item.Name
+                            }
+                        </td>
+                        <td>@item.UpdatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
+                        <td>
+                            @if (editingId == item.Id)
+                            {
+                                <button class="btn btn-sm btn-success me-2" @onclick="() => SaveEditAsync(item.Id)">Save</button>
+                                <button class="btn btn-sm btn-secondary" @onclick="CancelEdit">Cancel</button>
+                            }
+                            else
+                            {
+                                <button class="btn btn-sm btn-outline-primary me-2" @onclick="() => StartEdit(item)">Edit</button>
+                                <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteAsync(item.Id)">Delete</button>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+}
+
+@code {
+    private readonly List<CategoryDto> categories = new();
+    private readonly CreateModel createModel = new();
+
+    private bool isLoading = true;
+    private bool isBusy;
+    private string errorMessage = string.Empty;
+    private string successMessage = string.Empty;
+    private string? editingId;
+    private string editName = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (!AuthSession.IsAuthenticated)
+        {
+            isLoading = false;
+            return;
+        }
+
+        try
+        {
+            isLoading = true;
+            categories.Clear();
+            categories.AddRange(await CategoriesApiClient.ListAsync(CancellationToken.None));
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+            if (!AuthSession.IsAuthenticated)
+            {
+                NavigationManager.NavigateTo("/login");
+            }
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task CreateAsync()
+    {
+        if (string.IsNullOrWhiteSpace(createModel.Name))
+        {
+            return;
+        }
+
+        isBusy = true;
+        errorMessage = string.Empty;
+        successMessage = string.Empty;
+
+        var error = await CategoriesApiClient.CreateAsync(createModel.Name.Trim(), CancellationToken.None);
+        isBusy = false;
+
+        if (error is not null)
+        {
+            errorMessage = error;
+            if (!AuthSession.IsAuthenticated)
+            {
+                NavigationManager.NavigateTo("/login");
+            }
+            return;
+        }
+
+        createModel.Name = string.Empty;
+        successMessage = "Category created.";
+        await LoadAsync();
+    }
+
+    private void StartEdit(CategoryDto category)
+    {
+        editingId = category.Id;
+        editName = category.Name;
+    }
+
+    private void CancelEdit()
+    {
+        editingId = null;
+        editName = string.Empty;
+    }
+
+    private async Task SaveEditAsync(string id)
+    {
+        if (string.IsNullOrWhiteSpace(editName))
+        {
+            return;
+        }
+
+        isBusy = true;
+        errorMessage = string.Empty;
+        successMessage = string.Empty;
+
+        var error = await CategoriesApiClient.UpdateAsync(id, editName.Trim(), CancellationToken.None);
+        isBusy = false;
+
+        if (error is not null)
+        {
+            errorMessage = error;
+            if (!AuthSession.IsAuthenticated)
+            {
+                NavigationManager.NavigateTo("/login");
+            }
+            return;
+        }
+
+        successMessage = "Category updated.";
+        CancelEdit();
+        await LoadAsync();
+    }
+
+    private async Task DeleteAsync(string id)
+    {
+        isBusy = true;
+        errorMessage = string.Empty;
+        successMessage = string.Empty;
+
+        var error = await CategoriesApiClient.DeleteAsync(id, CancellationToken.None);
+        isBusy = false;
+
+        if (error is not null)
+        {
+            errorMessage = error;
+            if (!AuthSession.IsAuthenticated)
+            {
+                NavigationManager.NavigateTo("/login");
+            }
+            return;
+        }
+
+        successMessage = "Category deleted.";
+        await LoadAsync();
+    }
+
+    private sealed class CreateModel
+    {
+        public string Name { get; set; } = string.Empty;
+    }
+}

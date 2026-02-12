@@ -1,0 +1,352 @@
+@using PersonalFinanceOfflineTracker.Apps.WebDashboard.Services
+@inject TransactionsApiClient TransactionsApiClient
+@inject CategoriesApiClient CategoriesApiClient
+@inject AuthSession AuthSession
+@inject NavigationManager NavigationManager
+
+@page "/transactions"
+@rendermode InteractiveServer
+
+<PageTitle>Transactions</PageTitle>
+
+<h1>Transactions</h1>
+
+@if (!AuthSession.IsAuthenticated)
+{
+    <div class="alert alert-warning">
+        Please <a href="/login">login</a> first.
+    </div>
+}
+else
+{
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <div class="alert alert-danger">@errorMessage</div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(successMessage))
+    {
+        <div class="alert alert-success">@successMessage</div>
+    }
+
+    <div class="row g-2 align-items-end">
+        <div class="col-sm-4 col-md-3">
+            <label class="form-label" for="monthFilter">Month</label>
+            <input id="monthFilter" class="form-control" type="month" value="@monthFilter" @onchange="OnMonthChanged" />
+        </div>
+        <div class="col-sm-2 col-md-2">
+            <button class="btn btn-outline-secondary w-100" @onclick="LoadAsync">Refresh</button>
+        </div>
+    </div>
+
+    <div class="mt-3 mb-3 d-flex gap-3 flex-wrap">
+        <span class="badge text-bg-success">Income: @incomeTotal.ToString("0.00")</span>
+        <span class="badge text-bg-danger">Expense: @expenseTotal.ToString("0.00")</span>
+        <span class="badge text-bg-primary">Net: @netTotal.ToString("0.00")</span>
+    </div>
+
+    <EditForm Model="createModel" OnValidSubmit="CreateAsync">
+        <div class="row g-2 align-items-end">
+            <div class="col-sm-3 col-md-2">
+                <label class="form-label" for="amount">Amount</label>
+                <InputNumber id="amount" class="form-control" @bind-Value="createModel.Amount" />
+            </div>
+            <div class="col-sm-6 col-md-4">
+                <label class="form-label" for="description">Description</label>
+                <InputText id="description" class="form-control" @bind-Value="createModel.Description" />
+            </div>
+            <div class="col-sm-3 col-md-2">
+                <label class="form-label" for="date">Date</label>
+                <InputDate id="date" class="form-control" @bind-Value="createModel.TransactionDate" />
+            </div>
+            <div class="col-sm-4 col-md-2">
+                <label class="form-label" for="category">Category</label>
+                <InputSelect id="category" class="form-select" @bind-Value="createModel.CategoryId">
+                    <option value="">(none)</option>
+                    @foreach (var category in categories)
+                    {
+                        <option value="@category.Id">@category.Name</option>
+                    }
+                </InputSelect>
+            </div>
+            <div class="col-sm-2 col-md-2">
+                <button class="btn btn-primary w-100" type="submit" disabled="@isBusy">Add</button>
+            </div>
+        </div>
+    </EditForm>
+
+    <hr />
+
+    @if (isLoading)
+    {
+        <p><em>Loading transactions...</em></p>
+    }
+    else if (transactions.Count == 0)
+    {
+        <p>No transactions for selected filter.</p>
+    }
+    else
+    {
+        <table class="table table-sm table-striped align-middle">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Description</th>
+                    <th>Category</th>
+                    <th class="text-end">Amount</th>
+                    <th style="width: 240px;">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var item in transactions)
+                {
+                    <tr>
+                        @if (editingId == item.Id)
+                        {
+                            <td>
+                                <InputDate class="form-control form-control-sm" @bind-Value="editModel.TransactionDate" />
+                            </td>
+                            <td>
+                                <InputText class="form-control form-control-sm" @bind-Value="editModel.Description" />
+                            </td>
+                            <td>
+                                <InputSelect class="form-select form-select-sm" @bind-Value="editModel.CategoryId">
+                                    <option value="">(none)</option>
+                                    @foreach (var category in categories)
+                                    {
+                                        <option value="@category.Id">@category.Name</option>
+                                    }
+                                </InputSelect>
+                            </td>
+                            <td>
+                                <InputNumber class="form-control form-control-sm text-end" @bind-Value="editModel.Amount" />
+                            </td>
+                            <td>
+                                <button class="btn btn-sm btn-success me-2" @onclick="() => SaveEditAsync(item.Id)">Save</button>
+                                <button class="btn btn-sm btn-secondary" @onclick="CancelEdit">Cancel</button>
+                            </td>
+                        }
+                        else
+                        {
+                            <td>@item.TransactionDate</td>
+                            <td>@item.Description</td>
+                            <td>@GetCategoryName(item.CategoryId)</td>
+                            <td class="text-end">@item.Amount.ToString("0.00")</td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-primary me-2" @onclick="() => StartEdit(item)">Edit</button>
+                                <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteAsync(item.Id)">Delete</button>
+                            </td>
+                        }
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+}
+
+@code {
+    private readonly List<CategoryDto> categories = new();
+    private readonly List<TransactionDto> transactions = new();
+    private readonly CreateTransactionModel createModel = new();
+    private readonly EditTransactionModel editModel = new();
+
+    private bool isLoading = true;
+    private bool isBusy;
+    private string errorMessage = string.Empty;
+    private string successMessage = string.Empty;
+    private string monthFilter = DateTime.UtcNow.ToString("yyyy-MM");
+    private string? editingId;
+
+    private decimal incomeTotal;
+    private decimal expenseTotal;
+    private decimal netTotal;
+
+    protected override async Task OnInitializedAsync()
+    {
+        createModel.TransactionDate = DateOnly.FromDateTime(DateTime.Today);
+        editModel.TransactionDate = DateOnly.FromDateTime(DateTime.Today);
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (!AuthSession.IsAuthenticated)
+        {
+            isLoading = false;
+            return;
+        }
+
+        try
+        {
+            isLoading = true;
+            errorMessage = string.Empty;
+
+            categories.Clear();
+            categories.AddRange(await CategoriesApiClient.ListAsync(CancellationToken.None));
+
+            transactions.Clear();
+            transactions.AddRange(await TransactionsApiClient.ListAsync(monthFilter, CancellationToken.None));
+
+            RecalculateTotals();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+            if (!AuthSession.IsAuthenticated)
+            {
+                NavigationManager.NavigateTo("/login");
+            }
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task CreateAsync()
+    {
+        isBusy = true;
+        errorMessage = string.Empty;
+        successMessage = string.Empty;
+
+        var error = await TransactionsApiClient.CreateAsync(new CreateTransactionRequestDto
+        {
+            Amount = createModel.Amount,
+            Description = createModel.Description.Trim(),
+            TransactionDate = createModel.TransactionDate,
+            CategoryId = NormalizeCategoryId(createModel.CategoryId),
+        }, CancellationToken.None);
+
+        isBusy = false;
+
+        if (error is not null)
+        {
+            errorMessage = error;
+            if (!AuthSession.IsAuthenticated)
+            {
+                NavigationManager.NavigateTo("/login");
+            }
+            return;
+        }
+
+        createModel.Amount = 0;
+        createModel.Description = string.Empty;
+        createModel.TransactionDate = DateOnly.FromDateTime(DateTime.Today);
+        createModel.CategoryId = string.Empty;
+
+        successMessage = "Transaction created.";
+        await LoadAsync();
+    }
+
+    private void StartEdit(TransactionDto item)
+    {
+        editingId = item.Id;
+        editModel.Amount = item.Amount;
+        editModel.Description = item.Description;
+        editModel.TransactionDate = item.TransactionDate;
+        editModel.CategoryId = item.CategoryId ?? string.Empty;
+    }
+
+    private void CancelEdit()
+    {
+        editingId = null;
+    }
+
+    private async Task SaveEditAsync(string id)
+    {
+        isBusy = true;
+        errorMessage = string.Empty;
+        successMessage = string.Empty;
+
+        var error = await TransactionsApiClient.UpdateAsync(id, new UpdateTransactionRequestDto
+        {
+            Amount = editModel.Amount,
+            Description = editModel.Description.Trim(),
+            TransactionDate = editModel.TransactionDate,
+            CategoryId = NormalizeCategoryId(editModel.CategoryId),
+        }, CancellationToken.None);
+
+        isBusy = false;
+
+        if (error is not null)
+        {
+            errorMessage = error;
+            if (!AuthSession.IsAuthenticated)
+            {
+                NavigationManager.NavigateTo("/login");
+            }
+            return;
+        }
+
+        successMessage = "Transaction updated.";
+        CancelEdit();
+        await LoadAsync();
+    }
+
+    private async Task DeleteAsync(string id)
+    {
+        isBusy = true;
+        errorMessage = string.Empty;
+        successMessage = string.Empty;
+
+        var error = await TransactionsApiClient.DeleteAsync(id, CancellationToken.None);
+
+        isBusy = false;
+
+        if (error is not null)
+        {
+            errorMessage = error;
+            if (!AuthSession.IsAuthenticated)
+            {
+                NavigationManager.NavigateTo("/login");
+            }
+            return;
+        }
+
+        successMessage = "Transaction deleted.";
+        await LoadAsync();
+    }
+
+    private string GetCategoryName(string? categoryId)
+    {
+        if (string.IsNullOrWhiteSpace(categoryId))
+        {
+            return "(none)";
+        }
+
+        return categories.FirstOrDefault(x => x.Id == categoryId)?.Name ?? "(unknown)";
+    }
+
+    private void RecalculateTotals()
+    {
+        incomeTotal = transactions.Where(x => x.Amount >= 0).Sum(x => x.Amount);
+        expenseTotal = transactions.Where(x => x.Amount < 0).Sum(x => Math.Abs(x.Amount));
+        netTotal = incomeTotal - expenseTotal;
+    }
+
+    private static string? NormalizeCategoryId(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? null : value;
+    }
+
+    private void OnMonthChanged(ChangeEventArgs args)
+    {
+        monthFilter = args.Value?.ToString() ?? string.Empty;
+    }
+
+    private sealed class CreateTransactionModel
+    {
+        public decimal Amount { get; set; }
+        public string Description { get; set; } = string.Empty;
+        public DateOnly TransactionDate { get; set; }
+        public string CategoryId { get; set; } = string.Empty;
+    }
+
+    private sealed class EditTransactionModel
+    {
+        public decimal Amount { get; set; }
+        public string Description { get; set; } = string.Empty;
+        public DateOnly TransactionDate { get; set; }
+        public string CategoryId { get; set; } = string.Empty;
+    }
+}

@@ -19,6 +19,7 @@ Offline-first personal finance tracker with Telegram command ingest, MAUI Hybrid
 - MAUI background sync now performs push and pull/apply into local ledger DB.
 - Telegram ingest worker now persists via `FinanceDbContext` (idempotent `update_id`, command parser, transaction creation) and supports Bot API long polling when token is configured.
 - Baseline automated tests are added for auth services, parser, idempotent ingest, LWW conflicts, and tombstones.
+- Web Dashboard now has API wiring for JWT login, categories CRUD, transactions CRUD, and monthly totals view.
 - API, Domain, Infrastructure, Sync, Worker, and WebDashboard projects build successfully.
 
 ## v1 locked scope
@@ -52,10 +53,10 @@ Offline-first personal finance tracker with Telegram command ingest, MAUI Hybrid
 
 ## Suggested implementation order
 
-1. Implement dashboard API integration.
-2. Add Telegram worker integration tests for Bot API source and full ingest transaction behavior.
-3. Add MAUI UX polish for ledger editing/filtering and outbox monitor visibility.
-4. Harden security settings for production secrets and token rotation.
+1. Add Telegram worker integration tests for Bot API source and full ingest transaction behavior.
+2. Add MAUI UX polish for ledger editing/filtering and outbox monitor visibility.
+3. Harden security settings for production secrets and token rotation.
+4. Add Web dashboard read-only admin/reporting refinements (optional v1 extension).
 
 ## Database migrations
 
@@ -80,6 +81,15 @@ Run:
 Default local URL:
 
 `http://localhost:5000` or `https://localhost:5001` (depending on launch profile/port availability)
+
+Notes:
+
+- Web dashboard calls API endpoints directly. Configure API base URL via `src/PersonalFinanceOfflineTracker.Apps.WebDashboard/appsettings.json` (`Api:BaseUrl`).
+- Login page route: `/login`
+- Dashboard pages:
+  - `/categories` (CRUD)
+  - `/transactions` (CRUD + month filter + income/expense/net totals)
+- Ensure API is running before using dashboard data pages.
 
 ### API
 
