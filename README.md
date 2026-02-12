@@ -10,6 +10,8 @@ Offline-first personal finance tracker with Telegram command ingest, MAUI Hybrid
 - Infrastructure EF Core persistence is implemented (DbContext + entity configurations).
 - Initial EF Core migration is generated in `src/PersonalFinanceOfflineTracker.Infrastructure/Persistence/Migrations`.
 - API is wired to SQLite and applies migrations at startup (`FinanceDbContext.Database.Migrate()`).
+- JWT auth is implemented with seeded single-user login.
+- Authenticated categories and transactions endpoints are implemented with EF Core persistence.
 - API, Domain, Infrastructure, Sync, Worker, and WebDashboard projects build successfully.
 
 ## v1 locked scope
@@ -44,11 +46,10 @@ Offline-first personal finance tracker with Telegram command ingest, MAUI Hybrid
 ## Suggested implementation order
 
 1. Implement Telegram command parser and ingestion worker pipeline.
-2. Implement API auth and transaction/category endpoints.
-3. Implement sync endpoints and outbox processing.
-4. Implement MAUI local DB + offline CRUD + sync client.
-5. Implement dashboard API integration.
-6. Add integration tests for idempotency and sync conflict cases.
+2. Implement sync endpoints and outbox processing on persistent storage.
+3. Implement MAUI local DB + offline CRUD + sync client.
+4. Implement dashboard API integration.
+5. Add integration tests for idempotency and sync conflict cases.
 
 ## Database migrations
 
@@ -79,6 +80,23 @@ Default local URL:
 Run:
 
 `dotnet run --project src/PersonalFinanceOfflineTracker.Api/PersonalFinanceOfflineTracker.Api.csproj`
+
+Login (seeded dev user):
+
+- Email: `owner@local.dev`
+- Password: `P@ssword123!`
+
+Change these in `src/PersonalFinanceOfflineTracker.Api/appsettings.json` (`SeedUser` section) before non-local usage.
+
+JWT settings are in `src/PersonalFinanceOfflineTracker.Api/appsettings.json` (`Jwt` section). Replace `SigningKey` for production.
+
+Implemented API routes:
+
+- `POST /api/auth/login`
+- `GET /api/auth/me` (Bearer token required)
+- `GET|POST|PUT|DELETE /api/categories`
+- `GET|POST|PUT|DELETE /api/transactions`
+- `POST /api/sync/push` and `GET /api/sync/pull` (Bearer token required)
 
 ### Telegram worker
 

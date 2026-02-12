@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using PersonalFinanceOfflineTracker.Api.Services;
 using PersonalFinanceOfflineTracker.Sync.Abstractions;
 using PersonalFinanceOfflineTracker.Sync.Models;
 
@@ -8,7 +9,9 @@ public static class SyncEndpoints
 {
     public static IEndpointRouteBuilder MapSyncEndpoints(this IEndpointRouteBuilder endpoints)
     {
-        var group = endpoints.MapGroup("/api/sync").WithTags("Sync");
+        var group = endpoints.MapGroup("/api/sync")
+            .WithTags("Sync")
+            .RequireAuthorization();
 
         group.MapPost("/push", PushAsync)
             .WithName("PushSyncChanges");
@@ -21,27 +24,36 @@ public static class SyncEndpoints
 
     private static async Task<IResult> PushAsync(
         [FromBody] SyncPushRequestDto request,
+        HttpContext httpContext,
         ISyncService syncService,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(request.UserId))
+        var userId = httpContext.User.GetUserId();
+        if (string.IsNullOrWhiteSpace(userId))
         {
-            return Results.BadRequest("UserId is required.");
+            return Results.Unauthorized();
         }
 
-        var response = await syncService.PushAsync(request, cancellationToken);
+        if (!string.IsNullOrWhiteSpace(request.UserId) && !string.Equals(request.UserId, userId, StringComparison.Ordinal))
+        {
+            return Results.Forbid();
+        }
+
+        var normalizedRequest = request with { UserId = userId };
+        var response = await syncService.PushAsync(normalizedRequest, cancellationToken);
         return Results.Ok(response);
     }
 
     private static async Task<IResult> PullAsync(
-        [FromQuery] string userId,
         [FromQuery] string? cursor,
+        HttpContext httpContext,
         ISyncService syncService,
         CancellationToken cancellationToken)
     {
+        var userId = httpContext.User.GetUserId();
         if (string.IsNullOrWhiteSpace(userId))
         {
-            return Results.BadRequest("userId is required.");
+            return Results.Unauthorized();
         }
 
         var response = await syncService.PullAsync(userId, cursor, cancellationToken);
