@@ -12,6 +12,7 @@ Offline-first personal finance tracker with Telegram command ingest, MAUI Hybrid
 - API is wired to SQLite and applies migrations at startup (`FinanceDbContext.Database.Migrate()`).
 - JWT auth is implemented with seeded single-user login.
 - Authenticated categories and transactions endpoints are implemented with EF Core persistence.
+- Sync service is now DB-backed (no in-memory sync state).
 - API, Domain, Infrastructure, Sync, Worker, and WebDashboard projects build successfully.
 
 ## v1 locked scope
@@ -46,7 +47,7 @@ Offline-first personal finance tracker with Telegram command ingest, MAUI Hybrid
 ## Suggested implementation order
 
 1. Implement Telegram command parser and ingestion worker pipeline.
-2. Implement sync endpoints and outbox processing on persistent storage.
+2. Implement client outbox persistence and retry worker in MAUI app.
 3. Implement MAUI local DB + offline CRUD + sync client.
 4. Implement dashboard API integration.
 5. Add integration tests for idempotency and sync conflict cases.
@@ -97,6 +98,11 @@ Implemented API routes:
 - `GET|POST|PUT|DELETE /api/categories`
 - `GET|POST|PUT|DELETE /api/transactions`
 - `POST /api/sync/push` and `GET /api/sync/pull` (Bearer token required)
+
+Sync notes:
+
+- Server sync service uses database state for pull/push conflict checks (LWW by `UpdatedAt`, then `Id`).
+- Soft-deleted records are included in sync pull using tombstone semantics.
 
 ### Telegram worker
 

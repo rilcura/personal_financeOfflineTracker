@@ -24,7 +24,7 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 });
 
 builder.Services.AddInfrastructureSqlite(connectionString);
-builder.Services.AddSingleton<ISyncService, InMemorySyncService>();
+builder.Services.AddScoped<ISyncService, DbSyncService>();
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
