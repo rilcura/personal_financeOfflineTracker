@@ -13,6 +13,7 @@ Offline-first personal finance tracker with Telegram command ingest, MAUI Hybrid
 - JWT auth is implemented with seeded single-user login.
 - Authenticated categories and transactions endpoints are implemented with EF Core persistence.
 - Sync service is now DB-backed (no in-memory sync state).
+- MAUI app now has local SQLite outbox infrastructure and a background sync worker scaffold.
 - API, Domain, Infrastructure, Sync, Worker, and WebDashboard projects build successfully.
 
 ## v1 locked scope
@@ -47,8 +48,8 @@ Offline-first personal finance tracker with Telegram command ingest, MAUI Hybrid
 ## Suggested implementation order
 
 1. Implement Telegram command parser and ingestion worker pipeline.
-2. Implement client outbox persistence and retry worker in MAUI app.
-3. Implement MAUI local DB + offline CRUD + sync client.
+2. Wire MAUI UI flows to enqueue sync changes through the outbox service.
+3. Implement MAUI local transaction/category storage and offline CRUD screens.
 4. Implement dashboard API integration.
 5. Add integration tests for idempotency and sync conflict cases.
 
@@ -124,3 +125,5 @@ Notes:
 
 - Android target may require additional local Android workload/tooling setup.
 - If build output is locked, stop any running worker/app process before rebuilding.
+- MAUI local sync worker now runs on app startup and reads pending outbox rows from `local_sync.db` in app data.
+- To enable authenticated push from MAUI, store API token/session through `ISyncTokenStore` (`sync_access_token`, `sync_user_id` keys).
