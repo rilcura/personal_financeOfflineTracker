@@ -1,6 +1,24 @@
 # Personal Finance Offline Tracker
 
-Offline-first personal finance tracker with Telegram command ingest, MAUI Hybrid app, and a web dashboard.
+A C#/.NET prototype exploring expense tracking across a MAUI Blazor Hybrid app, an ASP.NET Core API, and a web dashboard, with foundations for offline synchronization and Telegram capture.
+
+**Status:** In development. The API and Sync Lab are implemented development surfaces. A finished consumer app, live Telegram integration, and production readiness are not claimed.
+
+**Stack:** .NET 10, C#, .NET MAUI, Blazor, ASP.NET Core, EF Core, SQLite, and JWT.
+
+## Engineering focus
+
+- Separate domain, persistence, API, synchronization, and UI projects.
+- Authenticated transaction/category endpoints and user-scoped data access.
+- Local outbox persistence and a background push worker.
+- Audit fields, soft deletes, and documented conflict rules.
+- A Sync Lab interface for examining changes before a complete finance UI exists.
+
+## What remains unfinished
+
+The MAUI app retains template pages alongside Sync Lab. The web dashboard still needs finance screens and API integration. Telegram parsing and ingestion classes exist, but the worker registers in-memory update and storage implementations rather than a live Telegram connection. No automated test project is present in the current tree.
+
+Screenshots, a recorded offline-to-online demonstration, integration tests, and device validation are next milestones.
 
 ## Current status
 
@@ -15,9 +33,9 @@ Offline-first personal finance tracker with Telegram command ingest, MAUI Hybrid
 - Sync service is now DB-backed (no in-memory sync state).
 - MAUI app now has local SQLite outbox infrastructure and a background sync worker scaffold.
 - MAUI Sync Lab UI is wired to enqueue category/transaction upsert/delete sync changes into the local outbox.
-- API, Domain, Infrastructure, Sync, Worker, and WebDashboard projects build successfully.
+- Earlier repository documentation reports successful builds for API, Domain, Infrastructure, Sync, Worker, and WebDashboard. This README refresh did not rerun builds.
 
-## v1 locked scope
+## Intended v1 scope
 
 - Telegram capture: slash commands + long polling + idempotency.
 - Backend API: JWT auth, transactions/categories CRUD, sync push/pull.
@@ -25,7 +43,7 @@ Offline-first personal finance tracker with Telegram command ingest, MAUI Hybrid
 - Web dashboard: transaction views and category management.
 - Sync foundations: outbox, tombstones, audit fields, LWW conflict handling.
 
-## Locked docs
+## Design documents
 
 1. Message contract: `docs/telegram-message-contract.md`
 2. Domain model: `docs/domain-model.md`
@@ -48,7 +66,7 @@ Offline-first personal finance tracker with Telegram command ingest, MAUI Hybrid
 
 ## Suggested implementation order
 
-1. Implement Telegram command parser and ingestion worker pipeline.
+1. Connect the existing Telegram parser and ingestion pipeline to a real update source and durable storage.
 2. Wire MAUI UI flows to enqueue sync changes through the outbox service.
 3. Implement MAUI local transaction/category storage and offline CRUD screens.
 4. Implement dashboard API integration.
@@ -66,7 +84,9 @@ Apply migration:
 
 `dotnet dotnet-ef database update --project src/PersonalFinanceOfflineTracker.Infrastructure/PersonalFinanceOfflineTracker.Infrastructure.csproj --startup-project src/PersonalFinanceOfflineTracker.Api/PersonalFinanceOfflineTracker.Api.csproj --context FinanceDbContext`
 
-## Run and test (current)
+## Local development
+
+Prerequisites: .NET 10 SDK and the platform-specific MAUI workloads/tooling for the target you intend to build. Windows MAUI commands below require Windows. Target declarations do not establish tested device support.
 
 ### Web dashboard
 
@@ -80,18 +100,21 @@ Default local URL:
 
 ### API
 
-Run:
+The MAUI sync client defaults to `http://localhost:5089`, while the API launch profiles use ports 5283/7002. For a Windows local preview, explicitly bind the API to the client default:
+
+```sh
+dotnet run --project src/PersonalFinanceOfflineTracker.Api/PersonalFinanceOfflineTracker.Api.csproj --no-launch-profile --urls http://localhost:5089
+```
+
+Alternatively, update `SyncClientOptions.ApiBaseUrl` to the address printed by the API. An emulator or physical device needs a host address reachable from that device.
+
+To use the repository launch profile instead:
 
 `dotnet run --project src/PersonalFinanceOfflineTracker.Api/PersonalFinanceOfflineTracker.Api.csproj`
 
-Login (seeded dev user):
+Development authentication:
 
-- Email: `owner@local.dev`
-- Password: `P@ssword123!`
-
-Change these in `src/PersonalFinanceOfflineTracker.Api/appsettings.json` (`SeedUser` section) before non-local usage.
-
-JWT settings are in `src/PersonalFinanceOfflineTracker.Api/appsettings.json` (`Jwt` section). Replace `SigningKey` for production.
+The API seeds a local user from the `SeedUser` configuration section. Configure your own development login and a `Jwt:SigningKey` using environment variables or another local configuration provider. Do not publish real credentials. Existing source defaults are development placeholders and need replacement before non-local use.
 
 Implemented API routes:
 
@@ -107,6 +130,8 @@ Sync notes:
 - Soft-deleted records are included in sync pull using tombstone semantics.
 
 ### Telegram worker
+
+This currently runs with in-memory update/store registrations. Starting the process does not connect to a live Telegram bot.
 
 Run:
 
